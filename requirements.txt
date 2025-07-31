@@ -473,6 +473,7 @@ PyWavelets==1.8.0
 PyYAML==6.0.2
 pyzmq==26.2.1
 raft-dask-cu12==25.6.0
+rake-nltk==1.0.6
 rapids-dask-dependency==25.6.0
 rapids-logger==0.1.1
 ratelim==0.1.6
