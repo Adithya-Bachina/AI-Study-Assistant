@@ -1,14 +1,14 @@
-import pke
+from rake_nltk import Rake # Import the Rake class from rake_nltk
 from nltk.corpus import stopwords
 import os
 import sys
 
-# Initialize NLTK stopwords for efficiency
+# Initialize NLTK stopwords for efficiency (rake_nltk can use these)
 _stop_words = list(stopwords.words('english'))
 
 def extract_keywords(text, num_keywords=5):
     """
-    Extracts keyphrases from the input text using the RAKE algorithm.
+    Extracts keyphrases from the input text using the RAKE algorithm (via rake_nltk).
 
     Args:
         text (str): The input text to extract keywords from.
@@ -20,22 +20,16 @@ def extract_keywords(text, num_keywords=5):
     # Ensure text is a string
     text = str(text)
 
-    # Initialize the RAKE extractor
-    extractor = pke.unsupervised.Rake()
+    # Initialize the Rake extractor
+    # You can pass a custom list of stopwords and even punctuation here if needed
+    rake_instance = Rake(stopwords=_stop_words)
 
-    # Load the document. pke handles internal tokenization, POS tagging using spaCy (if configured).
-    extractor.load_document(input=text, language='en')
+    # Extract keywords from the text
+    rake_instance.extract_keywords_from_text(text)
 
-    # Candidate selection: identify sequences of nouns and adjectives as potential keyphrases.
-    # n=2 allows for bigrams (two-word phrases). You can adjust this (e.g., n=3 for trigrams).
-    extractor.candidate_selection(n=2)
+    # Get the top N ranked phrases.
+    # get_ranked_phrases() returns a list of strings, ranked highest to lowest.
+    ranked_phrases = rake_instance.get_ranked_phrases()
 
-    # Candidate weighting: apply the RAKE algorithm to score candidates.
-    # Use NLTK's stopwords directly with pke's weighting.
-    extractor.candidate_weighting(stoplist=_stop_words)
-
-    # Get the top N best keyphrases based on their RAKE score.
-    keyphrases = extractor.get_n_best(n=num_keywords)
-
-    # Return just the keyphrase text, not the score (keyphrases are (text, score) tuples)
-    return [kp[0] for kp in keyphrases]
+    # Return the top 'num_keywords'
+    return ranked_phrases[:num_keywords]
