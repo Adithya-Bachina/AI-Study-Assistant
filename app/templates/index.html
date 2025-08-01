@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Study Assistant</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="theme-switch-wrapper">
+        <label class="theme-switch" for="checkbox">
+            <input type="checkbox" id="checkbox" />
+            <div class="slider round"></div>
+        </label>
+    </div>
+
+    <div class="container">
+        <h1><i class="fas fa-brain"></i> AI Study Assistant</h1>
+        <p>Get summaries, keywords, visualizations, and interactive questions from any text.</p>
+
+        <form action="{{ url_for('process') }}" method="post" class="text-form" id="main-form" enctype="multipart/form-data">
+            <div class="file-upload-container">
+                <input type="file" name="file_upload" id="file_upload" onchange="disableTextarea()">
+                <label for="file_upload" class="file-label"><i class="fas fa-upload"></i> Choose File</label>
+                <span id="file-name">No file chosen</span>
+            </div>
+            
+            <div class="or-separator">OR</div>
+
+            <textarea name="text_input" id="text_input" rows="15" placeholder="Paste your text here..." oninput="disableFileInput()">{{ original_text }}</textarea>
+
+            <div class="options">
+                <div>
+                    <label for="num_sentences">Summary Sentences:</label>
+                    <input type="number" id="num_sentences" name="num_sentences" value="{{ num_sentences if num_sentences is not none else 3 }}" min="1">
+                </div>
+                <div>
+                    <label for="num_keywords">Number of Keywords:</label>
+                    <input type="number" id="num_keywords" name="num_keywords" value="{{ num_keywords if num_keywords is not none else 10 }}" min="1">
+                </div>
+                <div>
+                    <label for="num_questions">Number of Questions:</label>
+                    <input type="number" id="num_questions" name="num_questions" value="{{ num_questions if num_questions is not none else 5 }}" min="1">
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button type="submit" name="action" value="all" class="btn-all"><i class="fas fa-cogs"></i> Process All</button>
+            </div>
+            <div class="button-group-minor">
+                <button type="submit" name="action" value="summarize">Summarize</button>
+                <button type="submit" name="action" value="keywords">Keywords</button>
+                <button type="submit" name="action" value="questions">Questions</button>
+                <button type="submit" name="action" value="analyze">Analyze</button>
+            </div>
+            
+            <button type="button" class="clear-btn" onclick="clearForm()">Clear All</button>
+        </form>
+
+        <div id="loader" class="loader-hidden">
+            <div class="spinner"></div>
+            <p>Processing...</p>
+        </div>
+
+        {% if error %}
+            <div class="error-message">{{ error }}</div>
+        {% endif %}
+
+        <div class="results">
+            {% if stats_result %}
+            <div class="result-card">
+                <h2><i class="fas fa-chart-bar"></i> Text Statistics</h2>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <span class="stat-value">{{ "%.1f"|format(stats_result.flesch_grade) }}</span>
+                        <span class="stat-label">Flesch-Kincaid Grade</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value">{{ stats_result.reading_time_minutes }} min</span>
+                        <span class="stat-label">Est. Reading Time</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value">{{ stats_result.word_count }}</span>
+                        <span class="stat-label">Word Count</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value">{{ stats_result.sentence_count }}</span>
+                        <span class="stat-label">Sentence Count</span>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if concepts_result %}
+            <div class="result-card">
+                <h2><i class="fas fa-tags"></i> Key Concepts & Entities</h2>
+                <div class="concepts-container">
+                    {% for label, entities in concepts_result.items() %}
+                        <div class="concept-group">
+                            <h3 class="concept-label">{{ label }}</h3>
+                            <div class="concept-tags">
+                                {% for entity in entities %}
+                                    <span class="concept-tag">{{ entity }}</span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    {% else %}
+                        <p>No key concepts or named entities were found.</p>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            {% if word_cloud_image %}
+            <div class="result-card">
+                <h2><i class="fas fa-cloud"></i> Keyword Cloud</h2>
+                <div class="word-cloud-container">
+                    <img src="data:image/png;base64,{{ word_cloud_image }}" alt="Keyword Word Cloud">
+                </div>
+            </div>
+            {% endif %}
+
+            {% if summary_result %}
+            <div class="result-card">
+                <h2><i class="fas fa-file-alt"></i> Summary <button class="copy-btn" onclick="copyToClipboard('summary-content')"><i class="fas fa-copy"></i> Copy</button></h2>
+                <div class="result-box" id="summary-content">
+                    <p>{{ summary_result }}</p>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if keywords_result %}
+            <div class="result-card">
+                <h2><i class="fas fa-key"></i> Keywords <button class="copy-btn" onclick="copyToClipboard('keywords-content')"><i class="fas fa-copy"></i> Copy</button></h2>
+                <div class="result-box" id="keywords-content">
+                    <p>{{ keywords_result }}</p>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if questions_result %}
+            <div class="result-card">
+                <h2><i class="fas fa-question-circle"></i> Interactive Questions</h2>
+                <div class="qa-container">
+                {% for qa_pair in questions_result %}
+                    <div class="qa-item">
+                        <p class="qa-question">{{ loop.index }}. {{ qa_pair.question }}</p>
+                        <div class="qa-answer-container">
+                            <button class="qa-toggle-btn" onclick="toggleAnswer(this)">Show Answer</button>
+                            <p class="qa-answer">{{ qa_pair.answer }}</p>
+                        </div>
+                    </div>
+                {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <script>
+        // --- Event Listeners and Core Functions ---
+        const mainForm = document.getElementById('main-form');
+        const loader = document.getElementById('loader');
+        mainForm.addEventListener('submit', () => { loader.classList.remove('loader-hidden'); });
+        
+        const toggleSwitch = document.getElementById('checkbox');
+        toggleSwitch.addEventListener('change', switchTheme, false);
+
+        function toggleAnswer(button) {
+            const answer = button.nextElementSibling;
+            if (answer.style.maxHeight) {
+                answer.style.maxHeight = null;
+                button.textContent = 'Show Answer';
+            } else {
+                answer.style.maxHeight = answer.scrollHeight + "px";
+                button.textContent = 'Hide Answer';
+            }
+        }
+
+        // --- Utility Functions ---
+        function copyToClipboard(elementId) {
+            const content = document.getElementById(elementId).innerText;
+            navigator.clipboard.writeText(content).then(() => { alert('Copied to clipboard!'); });
+        }
+
+        function switchTheme(e) {
+            const theme = e.target.checked ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+        }
+        
+        // --- Form Management ---
+        function clearForm() {
+            document.getElementById('main-form').reset();
+            document.getElementById('text_input').value = '';
+            document.getElementById('file-name').textContent = 'No file chosen';
+            document.getElementById('text_input').disabled = false;
+            document.getElementById('file_upload').disabled = false;
+            document.querySelector('.results').innerHTML = '';
+            loader.classList.add('loader-hidden');
+        }
+        function disableTextarea() {
+            const fileInput = document.getElementById('file_upload');
+            const textarea = document.getElementById('text_input');
+            const fileNameSpan = document.getElementById('file-name');
+            if (fileInput.files.length > 0) {
+                textarea.disabled = true;
+                fileNameSpan.textContent = fileInput.files[0].name;
+            } else {
+                textarea.disabled = false;
+                fileNameSpan.textContent = 'No file chosen';
+            }
+        }
+        function disableFileInput() {
+            const fileInput = document.getElementById('file_upload');
+            if (document.getElementById('text_input').value.trim() !== '') {
+                fileInput.disabled = true;
+            } else {
+                fileInput.disabled = false;
+            }
+        }
+
+        // --- Set initial theme on page load ---
+        const currentTheme = localStorage.getItem('theme');
+        if (currentTheme) {
+            document.documentElement.setAttribute('data-theme', currentTheme);
+            if (currentTheme === 'dark') {
+                toggleSwitch.checked = true;
+            }
+        }
+    </script>
+</body>
+</html>
